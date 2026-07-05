@@ -2,7 +2,7 @@ from appwrite.client import Client
 from appwrite.services.storage import Storage
 from appwrite.input_file import InputFile
 from appwrite.id import ID
-from app.core.config import settings
+from core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)

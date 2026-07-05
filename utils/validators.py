@@ -1,5 +1,5 @@
 from fastapi import UploadFile, HTTPException
-from app.core.config import settings
+from core.config import settings
 
 async def validate_image(file: UploadFile) -> None:
     if file.content_type not in settings.SUPPORTED_FORMATS:

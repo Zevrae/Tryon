@@ -1,9 +1,9 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.schemas.response import TryOnResponse
-from app.utils.validators import validate_image
-from app.services.image_service import save_temp_upload, save_temp_bytes, cleanup_temp_files
-from app.services.gemini_service import generate_tryon_image
-from app.services.appwrite_service import upload_generated_image
+from schemas.response import TryOnResponse
+from utils.validators import validate_image
+from services.image_service import save_temp_upload, save_temp_bytes, cleanup_temp_files
+from services.gemini_service import generate_tryon_image
+from services.appwrite_service import upload_generated_image
 import logging
 
 router = APIRouter()

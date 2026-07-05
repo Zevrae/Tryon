@@ -1,52 +1,65 @@
 import os
-import google.genai as genai
-from core.config import settings
 import logging
+from google import genai
+from core.config import settings
 
 logger = logging.getLogger(__name__)
-genai.configure(api_key=settings.GEMINI_API_KEY)
 
-# Note: Adjust the model name based on Google's current image-to-image/Imagen capabilities.
-MODEL_NAME = "gemini-1.5-pro" 
+# Initialize the new SDK client
+client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+# Use the current model built for multimodal image output
+MODEL_NAME = "gemini-3.1-flash-image" 
 
 async def generate_tryon_image(person_img_path: str, cloth_img_path: str) -> bytes:
     """
-    Sends the person and clothing images to Gemini for virtual try-on.
-    Returns the generated image as bytes.
+    Sends the person and clothing images to Gemini for virtual try-on using the new SDK.
     """
+    person_media = None
+    cloth_media = None
+    
     try:
-        # Upload files to Gemini temporarily for processing
-        person_media = genai.upload_file(person_img_path)
-        cloth_media = genai.upload_file(cloth_img_path)
+        # 1. Upload files using the initialized client
+        person_media = client.files.upload(file=person_img_path)
+        cloth_media = client.files.upload(file=cloth_img_path)
+        print(cloth_media)
 
         system_prompt = (
-            "I want you to regenerate the image at the left with the same "
-            "black Tshirt that I have already provided to you. "
-            "Maintain original quality, preserve Face, Pose, Body proportions, "
-            "Background, Lighting, and Skin tone. Output purely the generated image."
+            f'''
+                I want you to regenerate the image of the person with the same
+                {cloth_media} that I have already provided to you.
+                Maintain original quality, preserve Face, Pose, Body proportions,Background, 
+                Lighting, and Skin tone.
+            '''
+        )
+        
+        # 2. Generate content requesting IMAGE modality
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=[system_prompt, person_media, cloth_media],
+            config=genai.types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+            )
         )
 
-        model = genai.GenerativeModel(MODEL_NAME)
-        
-        # In a fully multimodal-to-image capable Gemini endpoint, this triggers generation.
-        # Ensure your Google Cloud / API tier supports image generation output from multimodal inputs.
-        response = model.generate_content([system_prompt, person_media, cloth_media])
-        
-        # Cleanup Gemini uploads
-        genai.delete_file(person_media.name)
-        genai.delete_file(cloth_media.name)
-
-        # Assuming the API returns image bytes in a specific blob structure, parse it.
-        # This is placeholder parsing logic depending on the exact Google GenAI library version
-        # and standard output for Imagen/Gemini image generation.
-        if hasattr(response, 'text') and not response.parts:
-            raise Exception("Gemini returned text instead of an image. Verify model capabilities.")
-            
-        # Placeholder for extracting image bytes from the response
-        # return response.candidates[0].content.parts[0].inline_data.data
-        
-        raise NotImplementedError("Extract image bytes based on your specific Gemini Image output format.")
+        # 3. Extract the image bytes
+        for part in response.parts:
+            if part.inline_data:
+                # inline_data.data contains the raw bytes of the generated image
+                return part.inline_data.data
+             
+        raise Exception("Gemini failed to return an image in the response parts.")
 
     except Exception as e:
         logger.error(f"Gemini generation failed: {str(e)}")
-        raise Exception("Gemini image generation failed.")
+        raise Exception(f"Gemini image generation failed: {str(e)}")
+        
+    finally:
+        # 4. Cleanup files using the client
+        try:
+            if person_media:
+                client.files.delete(name=person_media.name)
+            if cloth_media:
+                client.files.delete(name=cloth_media.name)
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to cleanup Gemini files: {cleanup_error}")

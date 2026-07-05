@@ -9,6 +9,13 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+@router.get("/", response_model=dict)
+async def health_check():
+    """
+    Health check endpoint to verify that the service is running.
+    """
+    return {"status": "ok", "message": "Service is running."}
+
 @router.post("/tryon", response_model=TryOnResponse)
 async def process_virtual_tryon(
     person_image: UploadFile = File(..., description="Full body image of the person."),

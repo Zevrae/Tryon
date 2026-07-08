@@ -5,11 +5,8 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Initialize the new SDK client
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
-
-# Use the current model built for multimodal image output
-MODEL_NAME = "gemini-3.1-flash-image" 
+MODEL_NAME = "gemini-3.1-flash-lite-image" 
 
 async def generate_tryon_image(person_img_path: str, cloth_img_path: str) -> bytes:
     """
@@ -19,22 +16,20 @@ async def generate_tryon_image(person_img_path: str, cloth_img_path: str) -> byt
     cloth_media = None
     
     try:
-        # 1. Upload files using the initialized client
-        person_media = client.files.upload(file=person_img_path)
-        cloth_media = client.files.upload(file=cloth_img_path)
-        print(cloth_media)
+        # ✅ Use await client.aio for async file uploads
+        person_media = await client.aio.files.upload(file=person_img_path)
+        cloth_media = await client.aio.files.upload(file=cloth_img_path)
 
-        system_prompt = (
-            f'''
-                I want you to regenerate the image of the person with the same
-                {cloth_media} that I have already provided to you.
-                Maintain original quality, preserve Face, Pose, Body proportions,Background, 
-                Lighting, and Skin tone.
-            '''
-        )
+        # ✅ Use plain text (no f-string or object interpolation needed)
+        system_prompt = """
+            I want you to regenerate the image of the person with the same
+            clothing that I have already provided to you.
+            Maintain original quality, preserve Face, Pose, Body proportions, Background, 
+            Lighting, and Skin tone.
+        """
         
-        # 2. Generate content requesting IMAGE modality
-        response = client.models.generate_content(
+        # ✅ Use await client.aio for async generation
+        response = await client.aio.models.generate_content(
             model=MODEL_NAME,
             contents=[system_prompt, person_media, cloth_media],
             config=genai.types.GenerateContentConfig(
@@ -42,12 +37,11 @@ async def generate_tryon_image(person_img_path: str, cloth_img_path: str) -> byt
             )
         )
 
-        # 3. Extract the image bytes
+        # Extract the image bytes
         for part in response.parts:
             if part.inline_data:
-                # inline_data.data contains the raw bytes of the generated image
                 return part.inline_data.data
-             
+                 
         raise Exception("Gemini failed to return an image in the response parts.")
 
     except Exception as e:
@@ -55,11 +49,11 @@ async def generate_tryon_image(person_img_path: str, cloth_img_path: str) -> byt
         raise Exception(f"Gemini image generation failed: {str(e)}")
         
     finally:
-        # 4. Cleanup files using the client
+        # ✅ Use await client.aio for async cleanup
         try:
             if person_media:
-                client.files.delete(name=person_media.name)
+                await client.aio.files.delete(name=person_media.name)
             if cloth_media:
-                client.files.delete(name=cloth_media.name)
+                await client.aio.files.delete(name=cloth_media.name)
         except Exception as cleanup_error:
             logger.warning(f"Failed to cleanup Gemini files: {cleanup_error}")

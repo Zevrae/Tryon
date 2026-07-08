@@ -27,7 +27,8 @@ async def upload_generated_image(file_path: str, filename: str = "generated-tryo
             permissions=["read(\"any\")"]  # Public read
         )
         
-        file_id = result['$id']
+        # ✅ CORRECT: Use dot notation to access the ID on the File object
+        file_id = result.id
         
         # Generate the public URL
         url = f"{settings.APPWRITE_ENDPOINT}/storage/buckets/{settings.APPWRITE_BUCKET_ID}/files/{file_id}/view?project={settings.APPWRITE_PROJECT_ID}"

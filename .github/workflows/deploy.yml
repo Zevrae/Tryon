@@ -1,0 +1,58 @@
+name: CI/CD Deploy Tryon to EC2
+
+on:
+  push:
+    branches:
+      - main   # adjust branch if needed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout latest commit
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: SSH into EC2 and deploy
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}       # EC2 public IP/DNS
+          username: ubuntu
+          key: ${{ secrets.SSH_KEY }}         # private SSH key stored in GitHub Secrets
+          script: |
+            # Navigate to project root
+            cd ~/Tryon
+
+            # Pull latest code
+            git pull origin main
+
+            # Stop and remove all containers
+            sudo docker rm -f $(sudo docker ps -aq) || true
+
+            # Clean up unused resources
+            sudo docker system prune -af
+            sudo docker volume prune -f
+
+            # Build new Docker image
+            sudo docker build -t tryon-backend .
+
+            # Run container with restart policy
+            sudo docker run -d --restart unless-stopped -p 8000:8000 --name tryon-backend tryon-backend
+
+            # Renew/reinstall SSL certificate for subdomain
+            sudo certbot --nginx -d tryon.zevrae.com --reinstall --non-interactive --agree-tos
+
+            # Test and reload Nginx
+            sudo nginx -t
+            sudo systemctl reload nginx
+
+            # Verify Docker container
+            sudo docker ps
+
+            # Verify Nginx status
+            sudo systemctl status nginx --no-pager
+
+            # Verify HTTPS endpoint
+            curl -Ik https://tryon.zevrae.com/docs

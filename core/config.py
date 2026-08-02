@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # 504-style failure from here).
     GEMINI_TIMEOUT_SECONDS: int = 50
 
+    # Same reasoning, for Appwrite Storage uploads (see services/appwrite_service.py).
+    APPWRITE_TIMEOUT_SECONDS: int = 20
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

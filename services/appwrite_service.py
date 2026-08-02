@@ -1,3 +1,4 @@
+import asyncio
 from appwrite.client import Client
 from appwrite.services.storage import Storage
 from appwrite.input_file import InputFile
@@ -20,13 +21,27 @@ async def upload_generated_image(file_path: str, filename: str = "generated-tryo
     Uploads an image to Appwrite storage and returns the file ID and public URL.
     """
     try:
-        result = storage.create_file(
-            bucket_id=settings.APPWRITE_BUCKET_ID,
-            file_id=ID.unique(),
-            file=InputFile.from_path(file_path),
-            permissions=["read(\"any\")"]  # Public read
+        # The Appwrite Python SDK is synchronous (blocking HTTP under the
+        # hood) — calling it directly inside this `async def` function
+        # would freeze the ENTIRE event loop for as long as the upload
+        # takes, stalling every other concurrent request this service is
+        # handling, not just this one. asyncio.to_thread() runs it on a
+        # worker thread instead, so the event loop stays responsive.
+        # asyncio.wait_for() adds a timeout on top, matching the same
+        # fix applied to the Gemini calls and to the Node backend's own
+        # Appwrite integration — without it, an unreachable/slow Appwrite
+        # endpoint would hang this call indefinitely.
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                storage.create_file,
+                bucket_id=settings.APPWRITE_BUCKET_ID,
+                file_id=ID.unique(),
+                file=InputFile.from_path(file_path),
+                permissions=["read(\"any\")"],  # Public read
+            ),
+            timeout=settings.APPWRITE_TIMEOUT_SECONDS,
         )
-        
+
         # ✅ CORRECT: Use dot notation to access the ID on the File object
         file_id = result.id
         
@@ -37,6 +52,12 @@ async def upload_generated_image(file_path: str, filename: str = "generated-tryo
             "file_id": file_id,
             "url": url
         }
+    except asyncio.TimeoutError:
+        logger.error(
+            f"Appwrite upload timed out after {settings.APPWRITE_TIMEOUT_SECONDS}s — "
+            f"check this server's outbound network access to APPWRITE_ENDPOINT ({settings.APPWRITE_ENDPOINT})."
+        )
+        raise Exception(f"Appwrite upload timed out after {settings.APPWRITE_TIMEOUT_SECONDS}s")
     except Exception as e:
         logger.error(f"Appwrite upload failed: {str(e)}")
         raise Exception("Failed to upload image to Appwrite.")
